@@ -4,6 +4,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
+import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from anthropic import AsyncAnthropic
 from google import genai
@@ -175,7 +176,7 @@ class OpenAIClient(AIClient):
     }
 
     # Providers that don't support response_format
-    _NO_RESPONSE_FORMAT = {"minimax"}
+    _NO_RESPONSE_FORMAT = {"minimax", "doubao"}
 
     # Providers that need temperature clamped to (0, 1]
     _TEMP_CLAMP = {"minimax"}
@@ -195,6 +196,12 @@ class OpenAIClient(AIClient):
         base_url = config.base_url or self._DEFAULT_BASE_URLS.get(config.provider.value)
         if base_url:
             kwargs["base_url"] = base_url
+
+        # 60s 总超时 / 10s 连接超时 - 防止 doubao 卡住导致 enrich 阶段挂死
+        kwargs["http_client"] = httpx.AsyncClient(
+            timeout=httpx.Timeout(60.0, connect=10.0),
+            limits=httpx.Limits(max_connections=5, max_keepalive_connections=2),
+        )
 
         self.client = AsyncOpenAI(**kwargs)
         self.model = config.model
@@ -583,7 +590,7 @@ def _create_chained_client(config: AIConfig) -> ChainedAIClient:
         raise ValueError("provider_chain is empty")
 
     chain_configs: List[AIConfig] = []
-    for name in provider_names:
+    for i, name in enumerate(provider_names):
         try:
             provider = AIProvider(name)
         except ValueError:
@@ -592,9 +599,13 @@ def _create_chained_client(config: AIConfig) -> ChainedAIClient:
         defaults = AI_PROVIDER_DEFAULTS.get(provider, {})
         cfg = AIConfig(
             provider=provider,
-            model=defaults.get("model", config.model),
-            api_key_env=defaults.get("api_key_env", config.api_key_env),
-            base_url=config.base_url,
+            # Primary config: use the explicitly configured model (from config.model).
+            # Fallback configs: use provider defaults (e.g., MiniMax-Text-01 for minimax).
+            model=config.model if i == 0 else defaults.get("model", config.model),
+            api_key_env=config.api_key_env if i == 0 else defaults.get("api_key_env", config.api_key_env),
+            # Only use explicit base_url for the first (primary) provider;
+            # fallback providers use their own default base URLs.
+            base_url=config.base_url if i == 0 else None,
             temperature=config.temperature,
             max_tokens=config.max_tokens,
             languages=config.languages,

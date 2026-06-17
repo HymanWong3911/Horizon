@@ -79,7 +79,13 @@ class ContentEnricher:
             sys.stderr = open(os.devnull, "w")
             try:
                 ddgs = DDGS()
-                results = await asyncio.to_thread(ddgs.text, query, max_results=max_results)
+                try:
+                    results = await asyncio.wait_for(
+                        asyncio.to_thread(ddgs.text, query, max_results=max_results),
+                        timeout=15.0,
+                    )
+                except (asyncio.TimeoutError, Exception):
+                    results = []
             finally:
                 sys.stderr.close()
                 sys.stderr = stderr
@@ -117,10 +123,17 @@ class ContentEnricher:
         )
 
         try:
-            response = await self.client.complete(
-                system=CONCEPT_EXTRACTION_SYSTEM,
-                user=user_prompt,
-            )
+            try:
+                response = await asyncio.wait_for(
+                    self.client.complete(
+                        system=CONCEPT_EXTRACTION_SYSTEM,
+                        user=user_prompt,
+                    ),
+                    timeout=30.0,
+                )
+            except (asyncio.TimeoutError, Exception) as exc:
+                print(f"  ⚠️  concept extraction timeout/error for {item.id}: {type(exc).__name__}")
+                return []
             result = self._parse_json_response(response)
             if result is None:
                 return []
@@ -130,8 +143,8 @@ class ContentEnricher:
             return []
 
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(min=2, max=10)
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(min=1, max=5)
     )
     async def _enrich_item(self, item: ContentItem) -> None:
         """Enrich a single item with background knowledge.
@@ -185,10 +198,18 @@ class ContentEnricher:
             web_context=web_context or "No web search results available.",
         )
 
-        response = await self.client.complete(
-            system=CONTENT_ENRICHMENT_SYSTEM,
-            user=user_prompt,
-        )
+        try:
+            response = await asyncio.wait_for(
+                self.client.complete(
+                    system=CONTENT_ENRICHMENT_SYSTEM,
+                    user=user_prompt,
+                ),
+                timeout=90.0,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:
+            print(f"  ⚠️  enrichment timeout/error for {item.id}: {type(exc).__name__}: {str(exc)[:80]}")
+            await self._translate_item(item)
+            return
 
         # Parse JSON response with robust fallback
         result = self._parse_json_response(response)

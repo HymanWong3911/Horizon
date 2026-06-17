@@ -141,8 +141,10 @@ class HorizonOrchestrator:
             self.console.print("")
 
             # 6. Search related stories + enrich with background knowledge (2nd AI pass)
-            await self._enrich_important_items(important_items)
-
+            if self.config.ai.skip_enrichment:
+                self.console.print("⏭️  Skipping enrichment (skip_enrichment=true)\n")
+            else:
+                await self._enrich_important_items(important_items)
             # 7. Generate and save daily summaries for each configured language
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             for lang in self.config.ai.languages:

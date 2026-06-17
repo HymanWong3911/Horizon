@@ -11,3 +11,24 @@ services:
     # Run daily at 8:00 AM UTC (adjust as needed)
     # For one-time run, use: docker compose run --rm horizon
     command: ["--hours", "24"]
+
+  # ============================================
+  # RSSHub - 把微信公众号等无 RSS 的源生成 RSS
+  # 端口 1200
+  # 文档: https://docs.rsshub.app/
+  # 公众号: /wechat/feeds?fname=xxx (需 cookie)
+  # 无 cookie 也能跑,但部分源有限频
+  # ============================================
+  rsshub:
+    image: diygod/rsshub:latest
+    container_name: rsshub
+    ports:
+      - "1200:1200"
+    environment:
+      - NODE_ENV=production
+      - CACHE_TYPE=memory
+      # 微信公众号 cookies (可选, 加了能稳定抓)
+      # 不加也能跑, 但限频严重
+      # - WECHAT_BIZ=金枪大叔,王扬名,...
+      # - WECHAT_COOKIE=...
+    restart: unless-stopped

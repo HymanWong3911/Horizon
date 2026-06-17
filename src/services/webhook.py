@@ -153,7 +153,7 @@ def _collapsible_panel(title: str, content: str) -> dict[str, Any]:
     """Build a Feishu Card JSON 2.0 collapsible panel."""
     return {
         "tag": "collapsible_panel",
-        "expanded": False,
+        "expanded": True,
         "header": {
             "title": _text(title),
             "icon": {
@@ -531,6 +531,23 @@ class WebhookNotifier:
                 return list(reversed(item_messages)) + [overview_message]
 
             return [overview_message] + item_messages
+
+        # For Feishu with text msg_type, use a compact brief instead of full markdown
+        platform = getattr(self.config, "platform", "generic")
+        if _is_feishu_platform(platform):
+            brief = summarizer.generate_feishu_brief(
+                important_items, date, all_items_count, language=lang
+            )
+            return [
+                {
+                    **base_vars,
+                    "message_title": (
+                        f"Horizon {date} 日报" if lang == "zh" else f"Horizon {date} Daily"
+                    ),
+                    "message_kind": "summary",
+                    "summary": brief,
+                }
+            ]
 
         return [
             {

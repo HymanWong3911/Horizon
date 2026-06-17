@@ -255,3 +255,33 @@ class DailySummarizer:
             f"> {labels['empty_analyzed'].format(total=total_fetched)}\n\n"
             + labels["empty_body"]
         )
+
+
+    def generate_feishu_brief(
+        self,
+        items: List[ContentItem],
+        date: str,
+        total_fetched: int,
+        language: str = "zh",
+    ) -> str:
+        """Generate compact Feishu brief with categorized highlights."""
+        if not items:
+            return f"📰 Horizon {date}\n\n从 {total_fetched} 条内容中筛选出 0 条重要资讯。\n\n完整日报请查看 Obsidian。"
+
+        top_items = items[:8]
+        lines = [f"📰 Horizon 每日速递 {date}"]
+        lines.append(f"📊 {total_fetched}条→{len(items)}条 | ⭐高分优先 | 完整版见Obsidian\n")
+
+        for i, item in enumerate(top_items, 1):
+            title = str(item.metadata.get(f"title_{language}") or item.title)
+            title = title[:42] + "..." if len(title) > 42 else title
+            score = item.ai_score or "?"
+            lines.append(f"{i}. {title} ⭐{score}/10")
+
+        lines.append(f"\n📁 {len(items)}条完整日报 → Obsidian: Horizon-Daily/")
+
+        brief = "\n".join(lines)
+        if len(brief) > 1500:
+            brief = brief[:1470] + "..."
+        return brief
+

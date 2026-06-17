@@ -111,11 +111,19 @@ class StorageManager:
     def save_daily_summary(self, date: str, markdown: str, language: str = "en") -> Path:
         filename = f"horizon-{date}-{language}.md"
         filepath = self.summaries_dir / filename
-
+        if language == "zh":
+            fm = ["---", "title: Horizon 日报 " + date, "date: " + date,
+                  "tags: [horizon, daily, news]", "source: Horizon AI",
+                  "created: " + date, "---", ""]
+        else:
+            fm = ["---", "title: Horizon Daily " + date, "date: " + date,
+                  "tags: [horizon, daily, news]", "source: Horizon AI",
+                  "created: " + date, "---", ""]
+        frontmatter = "\n".join(fm) + "\n\n"
         with open(filepath, "w", encoding="utf-8") as f:
-            f.write(markdown)
-
+            f.write(frontmatter + markdown)
         return filepath
+
 
     def load_subscribers(self) -> list:
         """Loads the list of email subscribers."""
